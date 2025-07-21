@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Caixa para Expedição</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow">
+    <h1 class="text-2xl font-bold mb-4 text-center">Simulador de Caixa para Expedição</h1>
+
+    <!-- Simulação -->
+    <div class="mb-6">
+      <h2 class="text-xl font-semibold mb-2">Simular Pedido</h2>
+      <table class="w-full text-sm mb-2">
+        <thead>
+          <tr class="bg-gray-200 text-left">
+           <th class="p-2">Código do Item</th>
+            <th class="p-2">Quantidade</th>
+            <th class="p-2">Descrição</th>
+            <th class="p-2">Ação</th>
+          </tr>
+        </thead>
+        <tbody id="linhasPedido">
+          <tr>
+            <td class="p-2"><input oninput="atualizarDescricao(this)" class="codigo border p-1 w-full" placeholder="Código" /></td>
+            <td class="p-2"><input type="number" class="quantidade border p-1 w-full" placeholder="Qtd" /></td>
+            <td class="p-2"><span class="descricao text-gray-700"></span></td>
+            <td class="p-2 text-center"><button onclick="removerLinha(this)" class="bg-red-500 text-white px-2 py-1 rounded">Remover</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <button onclick="adicionarLinha()" class="bg-gray-700 text-white px-4 py-2 rounded">+ Adicionar Linha</button>
+      <button onclick="calcularSimulacao()" class="ml-2 bg-black text-white px-4 py-2 rounded">Calcular Caixa Ideal</button>
+    </div>
+
+    <!-- Resultado -->
+    <div>
+      <h2 class="text-xl font-semibold mb-2">Resultado da Simulação</h2>
+      <div id="resultado" class="text-lg font-bold text-blue-700 whitespace-pre-line"></div>
+    </div>
+  </div>
+
+  <script>
+const itens = [
+  { codigo: "01019502", descricao: "01019502 - CLIPE HEMOSTATICO", peso: 0.02, comprimento: 13.5, largura: 14.0, altura: 0.9 },
+  { codigo: "01019504", descricao: "01019504 - CLIPE HEMOSTATICO BORDA PLANA", peso: 0.02, comprimento: 13.5, largura: 14.0, altura: 0.9 },
+  { codigo: "05019526R", descricao: "RESERVATORIO DE ACESSO LIQUORICO", peso: 0.025, comprimento: 13.5, largura: 14.0, altura: 0.625 },
+  { codigo: "05039540", descricao: "05039540 - INTRODUTOR DE CATETER 40 CM", peso: 0.095, comprimento: 48.5, largura: 15.0, altura: 0.74 },
+  { codigo: "01019503", descricao: "PINCA PARA CLIPE DE RANEY", peso: 0.1, comprimento: 20.0, largura: 13.5, altura: 0.75 },
+  { codigo: "KITBP7FR", descricao: "VBOLT KIT PARA INSERCAO E FIXACAO DO CATETER PIC 7FR", peso: 0.11, comprimento: 23.0, largura: 15.0, altura: 2.9 },
+  { codigo: "KITBV10FR", descricao: "VBOLT KIT PARA INSERCAO E FIXACAO DO CATETER PIC 10FR", peso: 0.11, comprimento: 23.0, largura: 15.0, altura: 2.9 },
+  { codigo: "06019415", descricao: "CABO PARA TRANSDUTOR DE PRESSAO", peso: 0.115, comprimento: 15.0, largura: 15.0, altura: 3.9 },
+  { codigo: "099F70PED", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - PEDIATRICO MEDIA", peso: 0.125, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F135NEO", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - NEONATAL ALTA", peso: 0.13, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F45NEO", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - NEONATAL BAIXA", peso: 0.13, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F70AD", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - ADULTO MEDIA", peso: 0.13, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F70NEO", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - NEONATAL MEDIA", peso: 0.13, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "05039560", descricao: "05039560 - INTRODUTOR DE CATETER 60CM", peso: 0.135, comprimento: 67.0, largura: 16.5, altura: 0.82 },
+  { codigo: "099F135AD", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - ADULTO ALTA", peso: 0.135, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F135PED", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - PEDIATRICO ALTA", peso: 0.135, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F45AD", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - ADULTO BAIXA", peso: 0.135, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F45PED", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - PEDIATRICO BAIXA", peso: 0.135, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F20AD", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - ADULTO EXTRA BAIXA", peso: 0.14, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F20NEO", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - NEONATAL EXTRA BAIXA", peso: 0.14, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F20PED", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - PEDIATRICO EXTRA BAIXA", peso: 0.14, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "099F100AD", descricao: "VALVULA PARA HIDROCEFALIA SYNCHRONY - SERIE CELLO - ADULTO NORMAL", peso: 0.145, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "0604000023", descricao: "CABO PARA CONEXAO  - PVB03", peso: 0.155, comprimento: 16.0, largura: 10.5, altura: 3.9 },
+  { codigo: "0604000021", descricao: "CABO PARA CONEXAO  - PVB01", peso: 0.165, comprimento: 16.0, largura: 10.5, altura: 3.9 },
+  { codigo: "0604000029", descricao: "CABO PARA CONEXAO - PVB05", peso: 0.165, comprimento: 16.0, largura: 10.5, altura: 3.9 },
+  { codigo: "0604000022", descricao: "CABO PARA CONEXAO  - PVB02", peso: 0.17, comprimento: 16.0, largura: 10.5, altura: 3.9 },
+  { codigo: "0503000009", descricao: "0503000009 SHUNT LOMBO-PERITONEAL RETO MEDIA PRESSAO ADULTO", peso: 0.18, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "0503000010", descricao: "0503000010 SHUNT LOMBO-PERITONEAL RETO BAIXA PRESSAO ADULTO", peso: 0.18, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "RUBIGRAV-0535", descricao: "DERIVACAO PARA HIDROCEFALIA RUBIGRAV-0535", peso: 0.18, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "0503000008", descricao: "0503000008 SHUNT LOMBO-PERITONEAL RETO ALTA PRESSAO ADULTO", peso: 0.185, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "0503000011", descricao: "0503000011 SHUNT LOMBO-PERITONEAL RETO ALTA PRESSAO PEDIATRICO", peso: 0.185, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "0503000012", descricao: "0503000012 SHUNT LOMBO-PERITONEAL RETO MEDIA PRESSAO PEDIATRICO", peso: 0.185, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "RUBIGRAV-0515", descricao: "DERIVACAO PARA HIDROCEFALIA RUBIGRAV-0515", peso: 0.185, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "RUBIGRAV-0520", descricao: "DERIVACAO PARA HIDROCEFALIA RUBIGRAV-0520", peso: 0.185, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "RUBIGRAV-0525", descricao: "DERIVACAO PARA HIDROCEFALIA RUBIGRAV-0525", peso: 0.185, comprimento: 35.5, largura: 16.5, altura: 3.3 },
+  { codigo: "0503000013", descricao: "0503000013 SHUNT LOMBO-PERITONEAL RETO BAIXA PRESSAO PEDIATRICO", peso: 0.19, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "DC5G10FR", descricao: "DRENO CIRURGICO HEMOSUB-G - 500 ML 10 FR", peso: 0.19, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "DC5G15FR", descricao: "DRENO CIRURGICO HEMOSUB-G - 500 ML 15 FR", peso: 0.195, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "DC5G19FR", descricao: "DRENO CIRURGICO HEMOSUB-G - 500 ML 19 FR", peso: 0.215, comprimento: 35.5, largura: 16.5, altura: 3.5 },
+  { codigo: "01039590", descricao: "01039590 - CAPA PARA MICROSCOPIO", peso: 0.22, comprimento: 23.0, largura: 15.0, altura: 3.0 },
+  { codigo: "DC2V10FR", descricao: "DRENO CIRURGICO HEMOSUB-V - 200 ML 10 FR", peso: 0.25, comprimento: 30.0, largura: 15.0, altura: 7.15 },
+  { codigo: "DC2V15FR", descricao: "DRENO CIRURGICO HEMOSUB-V - 200 ML 15 FR", peso: 0.255, comprimento: 30.0, largura: 15.0, altura: 7.15 },
+  { codigo: "DC2V19FR", descricao: "DRENO CIRURGICO HEMOSUB-V - 200 ML 19 FR", peso: 0.275, comprimento: 30.0, largura: 15.0, altura: 7.15 },
+  { codigo: "06029405", descricao: "06029405 - CATETER DE MEDICAO DA PRESSAO INTRACRANIANA PARENQUIMAL/SUBDURAL", peso: 0.28, comprimento: 54.5, largura: 19.0, altura: 2.65 },
+  { codigo: "04019700", descricao: "9700 - LCR 500A - CATETER DE DRENAGEM EXTERNA LCR - MODELO ADULTO", peso: 0.355, comprimento: 43.0, largura: 23.5, altura: 3.55 },
+  { codigo: "04019710", descricao: "CONJUNTO DE CATETER DRENAGEM EXTERNA LOMBAR LCR-300 - VENTURA", peso: 0.355, comprimento: 43.0, largura: 23.5, altura: 3.55 },
+  { codigo: "04019701", descricao: "9701 - LCR 500N - CATETER DE DRENAGEM EXTERNA LCR - MODELO NEONATAL", peso: 0.36, comprimento: 43.0, largura: 23.5, altura: 3.55 },
+  { codigo: "LCR800I1", descricao: "DRENAGEM VENTRICULAR EXTERNA INFANTIL", peso: 0.485, comprimento: 53.0, largura: 21.0, altura: 6.55 },
+  { codigo: "LCR800A2", descricao: "DRENAGEM VENTRICULAR EXTERNA ADULTO", peso: 0.495, comprimento: 53.0, largura: 21.0, altura: 6.55 },
+  { codigo: "LCR800A4", descricao: "DRENAGEM VENTRICULAR EXTERNA ADULTO", peso: 0.495, comprimento: 53.0, largura: 21.0, altura: 6.55 },
+  { codigo: "04019721", descricao: "9721 - LCR 600N - CATETER DE DRENAGEM EXTERNA LCR - MODELO NEONATAL", peso: 0.5, comprimento: 53.0, largura: 21.0, altura: 6.55 },
+  { codigo: "04019724", descricao: "04019724 - CATETER DE DRENAGEM EXTERNA LCR ANTIMICROBIANO - MODELO ADULTO", peso: 0.5, comprimento: 53.0, largura: 21.0, altura: 6.55 },
+  { codigo: "LCR800HA1", descricao: "DRENAGEM VENTRICULAR EXTERNA HEMORRAGICO", peso: 0.505, comprimento: 53.0, largura: 21.0, altura: 6.55 },
+  { codigo: "LCR800HA2", descricao: "DRENAGEM VENTRICULAR EXTERNA HEMORRAGICO", peso: 0.51, comprimento: 53.0, largura: 21.0, altura: 6.55 },
+];
+    const caixas = [
+  {
+    codigo: "L2",
+    descricao: "Caixa L2",
+    comprimento: 68.0,
+    largura: 55.0,
+    altura: 44.0,
+    pesoMax: 20,
+    peso: 0.6,
+    volume: (68.0 * 55.0 * 44.0) / 1000000
+  },
+  {
+    codigo: "K2",
+    descricao: "Caixa K2",
+    comprimento: 69.0,
+    largura: 44.0,
+    altura: 37.0,
+    pesoMax: 20,
+    peso: 0.5,    
+    volume: (69.0 * 44.0 * 37.0) / 1000000
+  },
+  {
+    codigo: "G",
+    descricao: "Caixa G",
+    comprimento: 46.0,
+    largura: 43.0,
+    altura: 32.5,
+    pesoMax: 20,
+    peso: 0.5, 
+    volume: (46.0 * 43.0 * 32.5) / 1000000
+  },
+  {
+    codigo: "F4",
+    descricao: "Caixa F4",
+    comprimento: 69.0,
+    largura: 25.5,
+    altura: 45.0,
+    pesoMax: 20,
+    peso: 0.5, 
+    volume: (69.0 * 25.5 * 45.0) / 1000000
+  },
+  {
+    codigo: "E2",
+    descricao: "Caixa E2",
+    comprimento: 68.0,
+    largura: 20.9,
+    altura: 17.0,
+    pesoMax: 20,
+    peso: 0.3, 
+    volume: (68.0 * 21.0 * 17.0) / 1000000
+  }, 
+  {
+    codigo: "D1",
+    descricao: "Caixa D1",
+    comprimento: 39.0,
+    largura: 39.0,
+    altura: 19.0,
+    pesoMax: 20,
+    peso: 0.3, 
+    volume: (39.0 * 39.0 * 19.0) / 1000000
+  },  
+  {
+    codigo: "B2",
+    descricao: "Caixa B2",
+    comprimento: 56.0,
+    largura: 31.0,
+    altura: 23.5,
+    pesoMax: 20,
+    peso: 0.2, 
+    volume: (56.0 * 31.0 * 23.5) / 1000000
+  },
+  {
+    codigo: "A2",
+    descricao: "Caixa A2",
+    comprimento: 38.0,
+    largura: 21.5,
+    altura: 19.0,
+    pesoMax: 20,
+    peso: 0.2, 
+    volume: (38.0 * 21.5 * 19.0) / 1000000
+  }
+];
+
+    function adicionarLinha() {
+      const linha = document.createElement('tr');
+      linha.innerHTML = `
+        <td class="p-2"><input oninput="atualizarDescricao(this)" class="codigo border p-1 w-full" placeholder="Código" /></td>
+        <td class="p-2"><input type="number" class="quantidade border p-1 w-full" placeholder="Qtd" /></td>
+        <td class="p-2"><span class="descricao text-gray-700"></span></td>
+        <td class="p-2 text-center"><button onclick="removerLinha(this)" class="bg-red-500 text-white px-2 py-1 rounded">Remover</button></td>
+      `;
+      document.getElementById('linhasPedido').appendChild(linha);
+    }
+
+    function removerLinha(btn) {
+      btn.closest('tr').remove();
+    }
+
+    function atualizarDescricao(input) {
+  const codigo = input.value.trim().toUpperCase();
+  const linha = input.closest('tr');
+  const span = linha.querySelector('.descricao');
+  const item = itens.find(i => i.codigo.toUpperCase() === codigo);
+
+  if (!item && codigo !== '') {
+    span.textContent = '❌ Código inválido';
+    span.classList.add('text-red-600');
+  } else {
+    span.textContent = item ? item.descricao : '';
+    span.classList.remove('text-red-600');
+  }
+}
+
+    function cabemMedidas(maiorMedida1, maiorMedida2, medidasCaixa) {
+      const permutacoes = [
+        [medidasCaixa.comprimento, medidasCaixa.largura],
+        [medidasCaixa.comprimento, medidasCaixa.altura],
+        [medidasCaixa.largura, medidasCaixa.comprimento],
+        [medidasCaixa.largura, medidasCaixa.altura],
+        [medidasCaixa.altura, medidasCaixa.comprimento],
+        [medidasCaixa.altura, medidasCaixa.largura],
+      ];
+      return permutacoes.some(([a, b]) => a >= maiorMedida1 && b >= maiorMedida2);
+    }
+
+    function calcularSimulacao() {
+      const linhas = document.querySelectorAll('#linhasPedido tr');
+      let cubagemTotal = 0;
+      let pesoTotal = 0;
+      let maiorComprimento = 0;
+      let maiorLargura = 0;
+
+      linhas.forEach(linha => {
+        const codigo = linha.querySelector('.codigo').value.trim().toUpperCase();
+        const quantidade = parseInt(linha.querySelector('.quantidade').value);
+        const item = itens.find(i => i.codigo.toUpperCase() === codigo);
+
+        if (item && !isNaN(quantidade) && quantidade > 0) {
+          const cubagem = (item.altura * item.largura * item.comprimento * quantidade) / 1000000;
+          cubagemTotal += cubagem;
+          pesoTotal += item.peso * quantidade;
+          if (item.comprimento > maiorComprimento) maiorComprimento = item.comprimento;
+          if (item.largura > maiorLargura) maiorLargura = item.largura;
+        }
+      });
+
+      const caixasValidas = caixas
+        .filter(c => cabemMedidas(maiorComprimento, maiorLargura, c))
+        .sort((a, b) => a.volume - b.volume);
+
+      let cubagemRestante = cubagemTotal;
+      const volumes = [];
+
+      while (cubagemRestante > 0) {
+        let caixaSelecionada = caixasValidas.find(c => c.volume * 0.887 >= cubagemRestante);
+        if (!caixaSelecionada) caixaSelecionada = caixasValidas[caixasValidas.length - 1];
+
+        const capacidadeReal = caixaSelecionada.volume * 0.887;
+        const volumeUsado = Math.min(capacidadeReal, cubagemRestante);
+        volumes.push({ caixa: caixaSelecionada, volumeUsado });
+        cubagemRestante -= volumeUsado;
+      }
+
+      const resumo = {};
+      let pesoBruto = pesoTotal;
+      volumes.forEach(v => {
+        const codigo = v.caixa.codigo;
+        resumo[codigo] = (resumo[codigo] || 0) + 1;
+        pesoBruto += v.caixa.peso || 0;
+      });
+
+      let texto = `Total de volumes: ${volumes.length}\n`;
+      for (const [codigo, quantidade] of Object.entries(resumo)) {
+        texto += `- ${quantidade} caixas ${codigo}\n`;
+      }
+      texto += `\nPeso líquido total: ${pesoTotal.toFixed(2)} kg`;
+      texto += `\nPeso bruto total: ${pesoBruto.toFixed(2)} kg`;
+
+      document.getElementById('resultado').innerText = texto;
+    }
+  </script>
+</body>
+</html>
