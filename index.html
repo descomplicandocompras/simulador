@@ -224,62 +224,70 @@ const itens = [
       return permutacoes.some(([a, b]) => a >= maiorMedida1 && b >= maiorMedida2);
     }
 
-    function calcularSimulacao() {
-      const linhas = document.querySelectorAll('#linhasPedido tr');
-      let cubagemTotal = 0;
-      let pesoTotal = 0;
-      let maiorComprimento = 0;
-      let maiorLargura = 0;
+  function calcularSimulacao() {
+  const linhas = document.querySelectorAll('#linhasPedido tr');
+  let cubagemTotal = 0;
+  let pesoTotal = 0;
+  let maiorComprimento = 0;
+  let maiorLargura = 0;
 
-      linhas.forEach(linha => {
-        const codigo = linha.querySelector('.codigo').value.trim().toUpperCase();
-        const quantidade = parseInt(linha.querySelector('.quantidade').value);
-        const item = itens.find(i => i.codigo.toUpperCase() === codigo);
+  linhas.forEach(linha => {
+    const codigo = linha.querySelector('.codigo').value.trim().toUpperCase();
+    const quantidade = parseInt(linha.querySelector('.quantidade').value);
+    const item = itens.find(i => i.codigo.toUpperCase() === codigo);
 
-        if (item && !isNaN(quantidade) && quantidade > 0) {
-          const cubagem = (item.altura * item.largura * item.comprimento * quantidade) / 1000000;
-          cubagemTotal += cubagem;
-          pesoTotal += item.peso * quantidade;
-          if (item.comprimento > maiorComprimento) maiorComprimento = item.comprimento;
-          if (item.largura > maiorLargura) maiorLargura = item.largura;
-        }
-      });
-
-      const caixasValidas = caixas
-        .filter(c => cabemMedidas(maiorComprimento, maiorLargura, c))
-        .sort((a, b) => a.volume - b.volume);
-
-      let cubagemRestante = cubagemTotal;
-      const volumes = [];
-
-      while (cubagemRestante > 0) {
-        let caixaSelecionada = caixasValidas.find(c => c.volume * 0.887 >= cubagemRestante);
-        if (!caixaSelecionada) caixaSelecionada = caixasValidas[caixasValidas.length - 1];
-
-        const capacidadeReal = caixaSelecionada.volume * 0.887;
-        const volumeUsado = Math.min(capacidadeReal, cubagemRestante);
-        volumes.push({ caixa: caixaSelecionada, volumeUsado });
-        cubagemRestante -= volumeUsado;
-      }
-
-      const resumo = {};
-      let pesoBruto = pesoTotal;
-      volumes.forEach(v => {
-        const codigo = v.caixa.codigo;
-        resumo[codigo] = (resumo[codigo] || 0) + 1;
-        pesoBruto += v.caixa.peso || 0;
-      });
-
-      let texto = `Total de volumes: ${volumes.length}\n`;
-      for (const [codigo, quantidade] of Object.entries(resumo)) {
-        texto += `- ${quantidade} caixas ${codigo}\n`;
-      }
-      texto += `\nPeso líquido total: ${pesoTotal.toFixed(2)} kg`;
-      texto += `\nPeso bruto total: ${pesoBruto.toFixed(2)} kg`;
-
-      document.getElementById('resultado').innerText = texto;
+    if (item && !isNaN(quantidade) && quantidade > 0) {
+      const cubagem = (item.altura * item.largura * item.comprimento * quantidade) / 1000000;
+      cubagemTotal += cubagem;
+      pesoTotal += item.peso * quantidade;
+      if (item.comprimento > maiorComprimento) maiorComprimento = item.comprimento;
+      if (item.largura > maiorLargura) maiorLargura = item.largura;
     }
+  });
+
+  const caixasValidas = caixas
+    .filter(c => cabemMedidas(maiorComprimento, maiorLargura, c))
+    .sort((a, b) => a.volume - b.volume);
+
+  let cubagemRestante = cubagemTotal;
+  const volumes = [];
+
+  while (cubagemRestante > 0) {
+    let caixaSelecionada = caixasValidas.find(c => c.volume * 0.887 >= cubagemRestante);
+    if (!caixaSelecionada) caixaSelecionada = caixasValidas[caixasValidas.length - 1];
+
+    const capacidadeReal = caixaSelecionada.volume * 0.887;
+    const volumeUsado = Math.min(capacidadeReal, cubagemRestante);
+    volumes.push({ caixa: caixaSelecionada, volumeUsado });
+    cubagemRestante -= volumeUsado;
+  }
+
+  const resumo = {};
+  let pesoBruto = pesoTotal;
+  volumes.forEach(v => {
+    const codigo = v.caixa.codigo;
+    resumo[codigo] = (resumo[codigo] || 0) + 1;
+    pesoBruto += v.caixa.peso || 0;
+  });
+
+  let texto = `Total de volumes: ${volumes.length}\n`;
+  for (const [codigo, quantidade] of Object.entries(resumo)) {
+    const caixaInfo = caixas.find(c => c.codigo === codigo);
+    if (caixaInfo) {
+      // Mostra as medidas entre parênteses no formato C x L x A cm
+      texto += `- ${quantidade} caixas ${codigo} (${caixaInfo.comprimento} x ${caixaInfo.largura} x ${caixaInfo.altura} cm)\n`;
+    } else {
+      // Fallback caso não encontre a caixa no array
+      texto += `- ${quantidade} caixas ${codigo}\n`;
+    }
+  }
+  texto += `\nPeso líquido total: ${pesoTotal.toFixed(2)} kg`;
+  texto += `\nPeso bruto total: ${pesoBruto.toFixed(2)} kg`;
+
+  document.getElementById('resultado').innerText = texto;
+}
   </script>
 </body>
 
 </html>
+
