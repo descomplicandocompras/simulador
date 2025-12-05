@@ -297,15 +297,34 @@ class BoxInstance {
 }
 
 function findBoxTypeParaItem(item) {
+  // Seleciona a caixa baseada na maior capacidade teórica de unidades do mesmo SKU
+  // Para cada caixa e cada orientação, calcula quantas unidades cabem por arranjo regular
+  // (usando divisão inteira em cada dimensão) e escolhe a caixa que permite mais unidades por embalagem.
   const orientacoes = permutationsDims(item);
-  const possiveis = caixas.filter(c => {
+  const candidatos = [];
+
+  caixas.forEach(c => {
+    let maxUnits = 0;
     for (const [l,w,h] of orientacoes) {
-      if (l <= c.comprimento + 1e-9 && w <= c.largura + 1e-9 && h <= c.altura + 1e-9) return true;
+      const fitL = Math.floor(c.comprimento / l);
+      const fitW = Math.floor(c.largura / w);
+      const fitH = Math.floor(c.altura / h);
+      const units = Math.max(0, fitL) * Math.max(0, fitW) * Math.max(0, fitH);
+      if (units > maxUnits) maxUnits = units;
     }
-    return false;
+    // só considera caixas que aceitam ao menos 1 unidade na melhor orientação
+    if (maxUnits > 0) candidatos.push({caixa: c, units: maxUnits});
   });
-  possiveis.sort((a,b) => a.volume - b.volume);
-  return possiveis.length ? possiveis[0] : null;
+
+  if (candidatos.length === 0) return null;
+
+  // Ordena por: maior units (mais eficiente), depois menor volume (economia) como desempate
+  candidatos.sort((a,b) => {
+    if (b.units !== a.units) return b.units - a.units;
+    return a.caixa.volume - b.caixa.volume;
+  });
+
+  return candidatos[0].caixa;
 }
 
 function calcularSimulacao() {
