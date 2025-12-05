@@ -328,13 +328,24 @@ function findBoxTypeParaItem(item) {
 }
 
 function calcularSimulacao() {
+  // 1) cálculo de cubagem e peso (como na versão antiga)
   const linhas = document.querySelectorAll('#linhasPedido tr');
+  let cubagemTotal = 0;
+  let pesoTotal = 0;
   const unidades = [];
+  let maiorComprimento = 0;
+  let maiorLargura = 0;
+
   linhas.forEach(linha => {
     const codigo = linha.querySelector('.codigo').value.trim().toUpperCase();
     const quantidade = parseInt(linha.querySelector('.quantidade').value);
     const item = itens.find(i => i.codigo.toUpperCase() === codigo);
     if (item && !isNaN(quantidade) && quantidade > 0) {
+      const cubagem = (item.altura * item.largura * item.comprimento * quantidade) / 1000000;
+      cubagemTotal += cubagem;
+      pesoTotal += item.peso * quantidade;
+      if (item.comprimento > maiorComprimento) maiorComprimento = item.comprimento;
+      if (item.largura > maiorLargura) maiorLargura = item.largura;
       for (let q = 0; q < quantidade; q++) unidades.push(item);
     }
   });
@@ -344,86 +355,137 @@ function calcularSimulacao() {
     return;
   }
 
+  // 2) etapa por cubagem: estimar combinação inicial de caixas baseada apenas em volume (capacidade efetiva)
+  const caixasOrdenadas = caixas.slice().sort((a,b) => a.volume - b.volume);
+  let cubagemRestante = cubagemTotal;
+  const propostaVolumes = [];
+
+  while (cubagemRestante > 1e-9) {
+    // tenta achar a menor caixa cujo capacity >= cubagemRestante
+    let caixaSelecionada = caixasOrdenadas.find(c => c.volume * 0.887 >= cubagemRestante);
+    if (!caixaSelecionada) {
+      // se nenhuma única caixa cobre o restante, escolher a maior caixa para dividir
+      caixaSelecionada = caixasOrdenadas[caixasOrdenadas.length - 1];
+    }
+    const capacidadeReal = caixaSelecionada.volume * 0.887;
+    const volumeUsado = Math.min(capacidadeReal, cubagemRestante);
+    propostaVolumes.push({ caixa: caixaSelecionada, volumeUsado });
+    cubagemRestante -= volumeUsado;
+  }
+
+  // 3) segunda prova: para cada caixa proposta, tentar empacotar fisicamente com o packer 3D
+  // faremos uma simulação iterativa: tentamos empacotar unidades na ordem do expedição (maior -> menor)
   unidades.sort((a,b) => (b.comprimento*b.largura*b.altura) - (a.comprimento*a.largura*a.altura));
 
-  const caixasAbertas = [];
-  const naoCoube = [];
+  // manter lista de caixas finais (instancias reais) onde tentaremos colocar as unidades
+  const caixasFinais = [];
+  // lista de unidades que falta alocar (cópia)
+  const faltantes = unidades.slice();
 
-  unidades.forEach(item => {
-    const caixaTipo = findBoxTypeParaItem(item);
-    if (!caixaTipo) {
-      naoCoube.push({ item, motivo: 'Dimensões maiores que todas as caixas disponíveis' });
-      return;
-    }
-
-    let colocado = false;
-
-    caixasAbertas.sort((a,b) => {
-      const volA = a.instancia.freeSpaces.reduce((s,fs)=> s + fs.l*fs.w*fs.h, 0);
-      const volB = b.instancia.freeSpaces.reduce((s,fs)=> s + fs.l*fs.w*fs.h, 0);
-      return volA - volB;
-    });
-
-    for (const entrada of caixasAbertas) {
-      if (entrada.instancia.tryPlace(item)) { colocado = true; break; }
-    }
-
-    if (!colocado) {
-      const novaInst = new BoxInstance(caixaTipo);
-      if (!novaInst.tryPlace(item)) {
-        naoCoube.push({ item, motivo: 'Erro ao inserir em nova caixa (verificar orientações)' });
-        return;
-      } else {
-        caixasAbertas.push({ instancia: novaInst, tipo: caixaTipo });
-        colocado = true;
-      }
-    }
+  // inicializar caixasFinais com a proposta por cubagem (cria instancias vazias na mesma quantidade)
+  propostaVolumes.forEach(pv => {
+    const inst = new BoxInstance(pv.caixa);
+    caixasFinais.push({ instancia: inst, tipo: pv.caixa });
   });
 
+  // função auxiliar para tentar colocar todas as unidades nas caixasFinais sequencialmente
+  function tentarAlocar(faltantesList) {
+    const naoAlocados = [];
+    // iterar sobre as unidades e tentar colocar
+    for (const item of faltantesList) {
+      let colocou = false;
+      // tentar inserir em cada caixa final existente (ordem de abertura)
+      for (const entrada of caixasFinais) {
+        if (entrada.instancia.tryPlace(item)) { colocou = true; break; }
+      }
+      if (!colocou) naoAlocados.push(item);
+    }
+    return naoAlocados;
+  }
+
+  let naoAlocados = tentarAlocar(faltantes);
+
+  // se houver unidades nao alocadas, vamos tentar substituír as caixas problemáticas pela próxima caixa maior e reempacotar
+  if (naoAlocados.length > 0) {
+    // estratégia: enquanto houver items nao alocados, substitua a caixa com menor volume pela próxima maior e tente reempacotar
+    // limite de iterações para evitar loop infinito
+    let tentativas = 0;
+    while (naoAlocados.length > 0 && tentativas < 100) {
+      tentativas++;
+      // encontrar a caixa final com menor volume (ou a que apresentou mais falhas) e substitui-la por uma maior
+      let idxParaSubstituir = -1;
+      let menorVol = Infinity;
+      caixasFinais.forEach((cf, idx) => {
+        if (cf.tipo.volume < menorVol) { menorVol = cf.tipo.volume; idxParaSubstituir = idx; }
+      });
+
+      if (idxParaSubstituir === -1) break;
+
+      // localizar próxima caixa maior no array de caixasOrdenadas
+      const tipoAtual = caixasFinais[idxParaSubstituir].tipo;
+      const pos = caixasOrdenadas.findIndex(c => c.codigo === tipoAtual.codigo);
+      if (pos === -1 || pos === caixasOrdenadas.length - 1) {
+        // já é a maior caixa possível, não pode substituir -> tentamos substituir outra ou sair
+        // procurar qualquer caixa que não seja a maior e que possamos substituir
+        const anySmaller = caixasOrdenadas.slice(0, -1).length > 0;
+        if (!anySmaller) break; // nada a fazer
+        // como fallback, vamos adicionar mais uma instância da maior caixa e tentar reempacotar
+        const maior = caixasOrdenadas[caixasOrdenadas.length - 1];
+        caixasFinais.push({ instancia: new BoxInstance(maior), tipo: maior });
+      } else {
+        const proxima = caixasOrdenadas[pos + 1];
+        // substitui
+        caixasFinais[idxParaSubstituir] = { instancia: new BoxInstance(proxima), tipo: proxima };
+      }
+
+      // re-iniciar todas as caixas (recriar instancias vazias) e re-tentar o empacotamento com a nova configuração
+      const tiposAtuais = caixasFinais.map(cf => cf.tipo);
+      caixasFinais.length = 0;
+      tiposAtuais.forEach(t => caixasFinais.push({ instancia: new BoxInstance(t), tipo: t }));
+
+      naoAlocados = tentarAlocar(unidades);
+      // se ainda não alocou tudo, loop continua substituindo caixas menores por maiores
+    }
+  }
+
+  // após as tentativas, montar resumo
   const resumo = {};
   let pesoLiquido = 0;
   unidades.forEach(u => { pesoLiquido += u.peso; });
 
   let pesoBruto = pesoLiquido;
-  caixasAbertas.forEach(entrada => {
+  caixasFinais.forEach(entrada => {
     const codigo = entrada.tipo.codigo;
     resumo[codigo] = (resumo[codigo] || 0) + 1;
     pesoBruto += (entrada.tipo.peso || 0);
   });
 
-  const limitesViolados = [];
-  caixasAbertas.forEach((entrada, idx) => {
-    const pesoCaixa = entrada.instancia.items.reduce((s,it) => s + (it.item.peso || 0), 0) + (entrada.tipo.peso || 0);
-    if (pesoCaixa > (entrada.tipo.pesoMax || Infinity)) {
-      limitesViolados.push({ indice: idx+1, tipo: entrada.tipo.codigo, peso: pesoCaixa, max: entrada.tipo.pesoMax });
-    }
-  });
-
-  let texto = `Total de volumes: ${caixasAbertas.length}\n`;
+  let texto = `Total de volumes: ${caixasFinais.length}
+`;
   for (const [codigo, quantidade] of Object.entries(resumo)) {
     const caixaInfo = caixas.find(c => c.codigo === codigo);
-    texto += `- ${quantidade} caixas ${codigo} (${caixaInfo.comprimento} x ${caixaInfo.largura} x ${caixaInfo.altura} cm)\n`;
+    texto += `- ${quantidade} caixas ${codigo} (${caixaInfo.comprimento} x ${caixaInfo.largura} x ${caixaInfo.altura} cm)
+`;
   }
-  texto += `\nPeso líquido total: ${pesoLiquido.toFixed(2)} kg`;
-  texto += `\nPeso bruto total: ${pesoBruto.toFixed(2)} kg`;
+  texto += `
+Peso líquido total: ${pesoLiquido.toFixed(2)} kg`;
+  texto += `
+Peso bruto total: ${pesoBruto.toFixed(2)} kg`;
 
-  if (naoCoube.length) {
-    texto += `\n\nItens que não couberam: ${naoCoube.length}\n`;
-    naoCoube.slice(0,10).forEach(nc => {
-      texto += `- ${nc.item.codigo} (${nc.motivo})\n`;
-    });
-  }
+  if (naoAlocados.length) {
+    texto += `
 
-  if (limitesViolados.length) {
-    texto += `\n\nAtenção: ${limitesViolados.length} caixas excederam peso máximo:\n`;
-    limitesViolados.forEach(lv => {
-      texto += `- Caixa #${lv.indice} tipo ${lv.tipo}: ${lv.peso.toFixed(2)} kg (max ${lv.max} kg)\n`;
+Itens que não couberam fisicamente: ${naoAlocados.length}
+`;
+    naoAlocados.slice(0,20).forEach(nc => {
+      texto += `- ${nc.codigo}
+`;
     });
   }
 
   document.getElementById('resultado').innerText = texto;
 }
 
-  </script>
+</script>
 </body>
 </html>
