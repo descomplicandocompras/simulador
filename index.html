@@ -296,34 +296,60 @@ class BoxInstance {
 
 }
 
-function findBoxTypeParaItem(item) {
-  // Seleciona a caixa baseada na maior capacidade teórica de unidades do mesmo SKU
-  // Para cada caixa e cada orientação, calcula quantas unidades cabem por arranjo regular
-  // (usando divisão inteira em cada dimensão) e escolhe a caixa que permite mais unidades por embalagem.
-  const orientacoes = permutationsDims(item);
-  const candidatos = [];
+// Estimativa realista de quantas unidades do mesmo SKU cabem em uma caixa
+function estimateMaxUnitsInBox(item, caixaTipo) {
+  // tenta empacotar o máximo de unidades usando variações de heurísticas
+  function trial(useReverseOrient=false) {
+    const inst = new BoxInstance(caixaTipo);
+    // obter orientações numa ordem possivelmente invertida
+    const baseOrients = permutationsDims(item);
+    const orientOrder = useReverseOrient ? baseOrients.slice().reverse() : baseOrients.slice();
 
-  caixas.forEach(c => {
-    let maxUnits = 0;
-    for (const [l,w,h] of orientacoes) {
-      const fitL = Math.floor(c.comprimento / l);
-      const fitW = Math.floor(c.largura / w);
-      const fitH = Math.floor(c.altura / h);
-      const units = Math.max(0, fitL) * Math.max(0, fitW) * Math.max(0, fitH);
-      if (units > maxUnits) maxUnits = units;
+    // versão local de tryPlace que respeita a ordem de orientações
+    function tryPlaceWithOrder(instance) {
+      for (let i = 0; i < instance.freeSpaces.length; i++) {
+        const space = instance.freeSpaces[i];
+        for (const [l,w,h] of orientOrder) {
+          if (l <= space.l + 1e-9 && w <= space.w + 1e-9 && h <= space.h + 1e-9) {
+            instance.splitSpace(i, space, l, w, h);
+            instance.items.push({ item, l, w, h });
+            instance.currentPeso += item.peso;
+            return true;
+          }
+        }
+      }
+      return false;
     }
-    // só considera caixas que aceitam ao menos 1 unidade na melhor orientação
-    if (maxUnits > 0) candidatos.push({caixa: c, units: maxUnits});
-  });
 
+    let count = 0;
+    while (true) {
+      const placed = tryPlaceWithOrder(inst);
+      if (!placed) break;
+      count++;
+      // prevenção segura: limite absurdo para evitar loop infinito
+      if (count > 1000) break;
+    }
+    return count;
+  }
+
+  // trials: default order, reversed order — pega o melhor
+  const t1 = trial(false);
+  const t2 = trial(true);
+  return Math.max(t1, t2);
+}
+
+function findBoxTypeParaItem(item) {
+  // Agora escolhe a caixa que, na prática (simulação), comporta o maior número de unidades do SKU
+  const candidatos = [];
+  caixas.forEach(c => {
+    const maxUnits = estimateMaxUnitsInBox(item, c);
+    if (maxUnits > 0) candidatos.push({ caixa: c, units: maxUnits });
+  });
   if (candidatos.length === 0) return null;
-
-  // Ordena por: maior units (mais eficiente), depois menor volume (economia) como desempate
   candidatos.sort((a,b) => {
-    if (b.units !== a.units) return b.units - a.units;
-    return a.caixa.volume - b.caixa.volume;
+    if (b.units !== a.units) return b.units - a.units; // prefere mais unidades
+    return a.caixa.volume - b.caixa.volume; // desempata por menor volume
   });
-
   return candidatos[0].caixa;
 }
 
